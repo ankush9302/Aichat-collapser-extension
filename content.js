@@ -11,6 +11,12 @@
   const DEBOUNCE_MS = 500;
   const DEBUG = true;
 
+  // ---- User message truncation ----
+  // Max height (in pixels) for user messages before they get truncated.
+  // Messages taller than this will show a "Show more" button.
+  // Play around with this value to find the right fit.
+  const USER_MSG_MAX_HEIGHT = 150; // px — adjust this!
+
   function log(...args) {
     if (DEBUG) console.log("[Chat Collapser]", ...args);
   }
@@ -334,6 +340,11 @@
         pair.aiResponse.style.display = shouldCollapse ? "none" : "";
       });
 
+      // Truncate long user messages (skip on Claude — it has built-in truncation)
+      if (PLATFORM !== "claude") {
+        truncateLongUserMessages(pairs);
+      }
+
       updateCounter();
       saveState();
     } finally {
@@ -342,7 +353,86 @@
   }
 
   // ============================================================
-  // 9. MutationObserver
+  // 9. User message truncation
+  // ============================================================
+  // If a user message (the userTurn element from our pairs) is
+  // taller than USER_MSG_MAX_HEIGHT pixels, we clamp it with
+  // max-height + overflow:hidden and add a "Show more" button.
+  //
+  // Uses the pairs we already found, so it works on any platform
+  // without needing platform-specific selectors.
+
+  function truncateLongUserMessages(pairs) {
+    pairs.forEach((pair) => {
+      const msgEl = pair.userTurn;
+
+      // Skip if we already processed this element
+      if (msgEl.getAttribute("data-cc-truncated") !== null) return;
+
+      // Temporarily remove any clamping to measure real height
+      const originalMaxHeight = msgEl.style.maxHeight;
+      const originalOverflow = msgEl.style.overflow;
+      msgEl.style.maxHeight = "none";
+      msgEl.style.overflow = "visible";
+
+      const fullHeight = msgEl.scrollHeight;
+
+      if (fullHeight <= USER_MSG_MAX_HEIGHT) {
+        // Short enough — restore and mark as checked
+        msgEl.style.maxHeight = originalMaxHeight;
+        msgEl.style.overflow = originalOverflow;
+        msgEl.setAttribute("data-cc-truncated", "false");
+        return;
+      }
+
+      // Message is too tall — clamp it
+      msgEl.style.maxHeight = USER_MSG_MAX_HEIGHT + "px";
+      msgEl.style.overflow = "hidden";
+      msgEl.style.position = "relative";
+      msgEl.setAttribute("data-cc-truncated", "true");
+
+      // Fade gradient overlay at the bottom
+      const fade = document.createElement("div");
+      fade.className = "cc-msg-fade";
+
+      // "Show more" toggle button
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "cc-msg-expand-btn";
+      toggleBtn.textContent = "Show more";
+
+      toggleBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const isExpanded = msgEl.getAttribute("data-cc-expanded") === "true";
+
+        if (isExpanded) {
+          msgEl.style.maxHeight = USER_MSG_MAX_HEIGHT + "px";
+          msgEl.style.overflow = "hidden";
+          msgEl.setAttribute("data-cc-expanded", "false");
+          toggleBtn.textContent = "Show more";
+          fade.style.display = "";
+        } else {
+          msgEl.style.maxHeight = "none";
+          msgEl.style.overflow = "visible";
+          msgEl.setAttribute("data-cc-expanded", "true");
+          toggleBtn.textContent = "Show less";
+          fade.style.display = "none";
+        }
+      });
+
+      // Insert fade inside the element, button after it
+      msgEl.appendChild(fade);
+      if (msgEl.nextSibling) {
+        msgEl.parentNode.insertBefore(toggleBtn, msgEl.nextSibling);
+      } else {
+        msgEl.parentNode.appendChild(toggleBtn);
+      }
+    });
+  }
+
+  // ============================================================
+  // 10. MutationObserver
   // ============================================================
 
   let debounceTimer = null;
