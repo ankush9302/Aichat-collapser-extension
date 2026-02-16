@@ -9,7 +9,7 @@
 
   const VISIBLE_RECENT_PAIRS = 2;
   const DEBOUNCE_MS = 500;
-  const DEBUG = true;
+  const DEBUG = false;
 
   // ---- User message truncation ----
   // Max height (in pixels) for user messages before they get truncated.
@@ -364,7 +364,10 @@
 
   function truncateLongUserMessages(pairs) {
     pairs.forEach((pair) => {
-      const msgEl = pair.userTurn;
+      // On ChatGPT, target the user bubble inside the article, not the whole article
+      const msgEl =
+        pair.userTurn.querySelector(".user-message-bubble-color") ||
+        pair.userTurn;
 
       // Skip if we already processed this element
       if (msgEl.getAttribute("data-cc-truncated") !== null) return;
